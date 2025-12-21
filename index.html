@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Falling Tap</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <div class="title">Falling Tap</div>
+        <div class="sub">落ちてくる“モノ”をタップして稼ぐ</div>
+      </div>
+      <div class="toggle">
+        <label><input id="soundToggle" type="checkbox" checked> 効果音</label>
+      </div>
+    </header>
+
+    <div class="stats">
+      <div class="card">
+        <div class="label">スコア</div>
+        <div class="value" id="score">0</div>
+      </div>
+      <div class="card">
+        <div class="label">連続キャッチ</div>
+        <div class="value" id="streak">0</div>
+      </div>
+      <div class="card">
+        <div class="label">残り時間</div>
+        <div class="value"><span id="time">20.0</span>s</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn primary" id="startBtn">START</button>
+      <button class="btn danger" id="resetBtn">RESET</button>
+    </div>
+
+    <div class="arena" id="arena">
+      <div class="hint">🍬=+ / 🌟CRIT=大加点 / 💣=減点（避けたい）</div>
+
+      <div class="overlay" id="overlay">
+        <div class="modal">
+          <div class="small">RESULT</div>
+          <h2>スコア</h2>
+          <div class="bigScore" id="resultScore">0</div>
+          <p>最大連続キャッチ：<b id="bestStreak">0</b></p>
+          <p class="small">STARTで再開できます</p>
+          <div class="modalBtns">
+            <button class="btn primary" id="againBtn">もう一回</button>
+            <button class="btn" id="closeBtn">閉じる</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/game.js"></script>
+</body>
+</html>
