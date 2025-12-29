@@ -8,12 +8,17 @@
   --txt:#3b2f3a;
   --sub:#7a6674;
 
-  --accent:#ff7ab6;   /* ピンク */
-  --accent2:#7dd7ff;  /* 水色 */
-  --mint:#9af0c8;     /* ミント */
-  --danger:#ff6b8a;   /* 赤 */
+  --accent:#ff7ab6;
+  --accent2:#7dd7ff;
+  --mint:#9af0c8;
+  --danger:#ff6b8a;
 
   --shadow: 0 16px 40px rgba(30, 10, 20, .12);
+}
+
+/* ★ズーム絡みのブレ対策（見た目は変えない） */
+html, body{
+  -webkit-text-size-adjust: 100%;
 }
 
 *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
@@ -33,6 +38,9 @@ body{
   align-items:center;
   justify-content:center;
   padding:16px;
+
+  /* ★ボタンが効かなくなるので none にはしない */
+  touch-action: manipulation;
 }
 
 .app{
@@ -70,6 +78,8 @@ header{
   border-radius:999px;
   padding:8px 10px;
   box-shadow: 0 8px 18px rgba(255, 122, 182, .12);
+
+  touch-action: manipulation;
 }
 
 input[type="checkbox"]{transform: scale(1.1);}
@@ -105,6 +115,8 @@ input[type="checkbox"]{transform: scale(1.1);}
   cursor:pointer;
   box-shadow: 0 10px 16px rgba(30, 10, 20, .08);
   transition: transform .06s ease;
+
+  touch-action: manipulation;
 }
 
 .btn:active{transform: translateY(1px) scale(.99);}
@@ -134,7 +146,9 @@ input[type="checkbox"]{transform: scale(1.1);}
   position:relative;
   overflow:hidden;
   user-select:none;
-  touch-action: manipulation;
+
+  /* ★ここでズーム/スクロール系を止める（ボタンは影響なし） */
+  touch-action: none;
 }
 
 /* ふわふわドット背景 */
@@ -163,7 +177,32 @@ input[type="checkbox"]{transform: scale(1.1);}
   box-shadow: 0 10px 18px rgba(30, 10, 20, .08);
 }
 
-/* スコアの浮き文字 */
+/* 落ち物：スライム（画像表示） */
+.drop{
+  position:absolute;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  will-change: transform, top, left;
+  transform: translateZ(0);
+}
+
+/* 画像を綺麗にフィット */
+.drop img{
+  width:90px;
+  height:90px;
+  object-fit:contain;
+  user-select:none;
+  pointer-events:none;
+  image-rendering: auto;
+}
+
+/* タップ時の“ぷにっ” */
+.drop:active{
+  transform: scale(0.94);
+}
+
 .float{
   position:absolute;
   font-weight:1000;
@@ -222,39 +261,4 @@ input[type="checkbox"]{transform: scale(1.1);}
   gap:10px;
   justify-content:center;
   margin-top:12px;
-}
-
-/* =========================
-   落ち物：スライム（画像表示）
-   ========================= */
-.drop{
-  position:absolute;
-  /* JS側で “当たり判定を甘め” にするので、ここは見た目用 */
-  display:flex;
-  align-items:center;
-  justify-content:center;
-
-  cursor:pointer;
-  will-change: transform, top, left;
-  transform: translateZ(0);
-}
-
-/* 画像を綺麗にフィットさせる */
-.drop img{
-  width:110pxpx;
-  height:110px;
-  object-fit:contain;
-  user-select:none;
-  pointer-events:none; /* タップ判定は親divに */
-  image-rendering: auto;
-}
-
-/* タップ時の“ぷにっ” */
-.drop:active{
-  transform: scale(0.94);
-}
-html, body {
-  touch-action: none;
-  overscroll-behavior: none;
-  -webkit-text-size-adjust: 100%;
 }

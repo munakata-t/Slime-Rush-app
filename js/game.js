@@ -1,22 +1,3 @@
-// ====== iOS Safari 拡大防止（完全版） ======
-let lastTouchTime = 0;
-document.addEventListener(
-  "touchend",
-  (e) => {
-    const now = Date.now();
-    if (now - lastTouchTime < 350) {
-      e.preventDefault();
-    }
-    lastTouchTime = now;
-  },
-  { passive: false }
-);
-
-// ピンチズーム防止
-document.addEventListener("gesturestart", e => e.preventDefault(), { passive:false });
-document.addEventListener("gesturechange", e => e.preventDefault(), { passive:false });
-document.addEventListener("gestureend", e => e.preventDefault(), { passive:false });
-
 (() => {
   const UI = {
     score: document.getElementById("score"),
@@ -33,39 +14,34 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     soundToggle: document.getElementById("soundToggle"),
   };
 
-  // ====== 画面拡大（ダブルタップ/ピンチ）対策 ======
-  // iOS Safariの「たまに拡大する」を止める用
-  let lastTouchEnd = 0;
-  document.addEventListener(
+  // ====== iOS Safari “ズーム”対策（ボタンは殺さない：arena内だけ） ======
+  let lastArenaTouchEnd = 0;
+  UI.arena.addEventListener(
     "touchend",
     (e) => {
       const now = Date.now();
-      if (now - lastTouchEnd <= 300) e.preventDefault(); // ダブルタップ拡大防止
-      lastTouchEnd = now;
+      if (now - lastArenaTouchEnd < 350) e.preventDefault(); // ダブルタップズーム抑止
+      lastArenaTouchEnd = now;
     },
     { passive: false }
   );
-
-  // ピンチ拡大ジェスチャー防止（iOS）
-  ["gesturestart", "gesturechange", "gestureend"].forEach((ev) => {
-    document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
-  });
-
-  // ゲーム領域はスクロール/拡大を許さない
-  UI.arena.style.touchAction = "none";
   UI.arena.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+  // ピンチジェスチャー（iOS）を “arenaでだけ” 抑止
+  ["gesturestart", "gesturechange", "gestureend"].forEach((ev) => {
+    UI.arena.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  });
 
   // ====== Game params ======
   const GAME_TIME = 20.0;
   const SPAWN_MS = 520;
 
-  // 全色同じ速度、時間経過で加速
   const BASE_FALL_SPEED = 120; // px/sec
   const SPEED_RAMP = 2.2;
 
   const MAX_DROPS = 18;
 
-  // 見た目サイズ（CSS .drop img と合わせる）
+  // 見た目サイズ（CSS img と合わせる）
   const VISUAL_SIZE = 90;
 
   // 当たり判定 ちょい甘め
@@ -108,7 +84,6 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
   let timerId = null;
   let spawnId = null;
   let rafId = null;
-  let lastFrame = 0;
 
   /** drops: {el, x, y, vy, kind, hitSize} */
   const drops = [];
@@ -116,22 +91,21 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
   // ====== Audio（SE + BGM） ======
   let audioCtx = null;
 
-  // バス（音量バランス調整用）
+  // バス（音量バランス）
   let masterGain = null;
   let seBus = null;
   let bgmBus = null;
 
-  // ★ここで音量バランスを調整（BGM↓ / SE↑）
+  // ★ここで音量バランス（BGM小 / SE大）
   const MASTER_GAIN = 0.95;
-  const SE_BUS_GAIN = 1.35;   // ←SEを大きく
-  const BGM_BUS_GAIN = 0.28;  // ←BGMを小さく
+  const SE_BUS_GAIN = 1.55;   // SEを大きく
+  const BGM_BUS_GAIN = 0.18;  // BGMを小さく
 
   function ensureAudio() {
     if (!UI.soundToggle.checked) return;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
 
-    // 初回だけ音声バスを組む
     if (!masterGain) {
       masterGain = audioCtx.createGain();
       seBus = audioCtx.createGain();
@@ -172,7 +146,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     osc.stop(t0 + dur);
   }
 
-  // ====== SE（前のまま：ぷにっ / ぼよん） ======
+  // ====== SE（ぷにっ/ぼよん：そのまま） ======
   function sePuni(mode = "base") {
     if (mode === "red") {
       tone({ freq: 820, dur: 0.055, type: "triangle", gain: 0.11, slide: 0.16 });
@@ -207,13 +181,18 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     setTimeout(() => tone({ freq: 260, dur: 0.14, type: "sine", gain: 0.07, slide: -0.25 }), 90);
   }
 
-  // ====== BGM（ピコピコ） ======
+  // ====== BGM（ピコピコ・かわいい） ======
   let bgmOn = false;
   let bgmTimer = null;
 
-  // 明るいピコピコ
-  const BGM_NOTES = [523.25, 659.25, 783.99, 659.25]; // C5 E5 G5 E5
-  const BGM_TEMPO_MS = 220; // テンポ
+  // かわいい明るいループ（Cメジャー系）
+ const BGM_NOTES = [
+  523.25, // C5
+  659.25, // E5
+  783.99, // D5
+  659.25, // E5
+];
+  const BGM_TEMPO_MS = 220;
 
   function bgmBeep(freq) {
     if (!UI.soundToggle.checked) return;
@@ -227,15 +206,14 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     osc.type = "square";
     osc.frequency.setValueAtTime(freq, t0);
 
-    // バスで絞るので、ここは適度に（音色の芯を残す）
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.13);
 
     osc.connect(g);
     g.connect(bgmBus);
     osc.start(t0);
-    osc.stop(t0 + 0.20);
+    osc.stop(t0 + 0.15);
   }
 
   function startBGM() {
@@ -253,7 +231,6 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
       step++;
       bgmTimer = setTimeout(loop, BGM_TEMPO_MS);
     };
-
     loop();
   }
 
@@ -269,27 +246,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     if (!UI.soundToggle.checked) stopBGM();
   });
 
-  // ====== FX（弾ける） ======
-  // CSSで .spark と @keyframes spark / .float と @keyframes floatUp がある前提
-  function burstEffect(x, y, n = 10, color = "rgba(255,122,182,.9)") {
-    for (let i = 0; i < n; i++) {
-      const s = document.createElement("div");
-      s.className = "spark";
-      s.style.left = x + "px";
-      s.style.top = y + "px";
-      s.style.background = color;
-      s.style.boxShadow = `0 0 18px ${color}`;
-
-      const ang = Math.random() * Math.PI * 2;
-      const dist = 22 + Math.random() * 34;
-      s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
-      s.style.setProperty("--dy", Math.sin(ang) * dist + "px");
-
-      UI.arena.appendChild(s);
-      s.addEventListener("animationend", () => s.remove(), { once: true });
-    }
-  }
-
+  // ====== FX ======
   function spawnFloat(text, x, y, color) {
     const el = document.createElement("div");
     el.className = "float";
@@ -300,6 +257,23 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     el.style.color = color || "rgba(255, 122, 182, .95)";
     UI.arena.appendChild(el);
     el.addEventListener("animationend", () => el.remove(), { once: true });
+  }
+
+  function burstEffect(x, y, n = 10, color = "rgba(255,122,182,.9)") {
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement("div");
+      s.className = "spark";
+      s.style.left = x + "px";
+      s.style.top = y + "px";
+      s.style.background = color;
+      s.style.boxShadow = `0 0 18px ${color}`;
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 22 + Math.random() * 34;
+      s.style.setProperty("--dx", (Math.cos(ang) * dist) + "px");
+      s.style.setProperty("--dy", (Math.sin(ang) * dist) + "px");
+      UI.arena.appendChild(s);
+      s.addEventListener("animationend", () => s.remove(), { once: true });
+    }
   }
 
   // ====== UI ======
@@ -314,10 +288,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
   }
 
   // ====== Helpers ======
-  function rand(min, max) {
-    return Math.random() * (max - min) + min;
-  }
-
+  function rand(min, max) { return Math.random() * (max - min) + min; }
   function pickKind() {
     const r = Math.random();
     let acc = 0;
@@ -328,14 +299,13 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     return SPAWN_RATE[SPAWN_RATE.length - 1].kind;
   }
 
-  // ====== Drop spawn ======
+  // ====== Spawn ======
   function spawnDrop() {
     if (!running) return;
     if (drops.length >= MAX_DROPS) return;
 
     const w = UI.arena.clientWidth;
     const kind = pickKind();
-
     const hitSize = Math.round(VISUAL_SIZE * HIT_SCALE);
 
     const el = document.createElement("div");
@@ -354,8 +324,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     const x = rand(8, w - hitSize - 8);
     const y = -hitSize - rand(0, 80);
 
-    // 時間経過で加速（全色共通）
-    const t = 1 - timeLeft / GAME_TIME; // 0→1
+    const t = 1 - (timeLeft / GAME_TIME);
     const speedMul = 1 + t * SPEED_RAMP;
     const vy = BASE_FALL_SPEED * speedMul;
 
@@ -363,60 +332,54 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     el.style.left = x + "px";
     el.style.top = y + "px";
 
-    el.addEventListener(
-      "pointerdown",
-      (e) => {
-        e.preventDefault();
-        ensureAudio();
-        if (!running) return;
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      ensureAudio();
+      if (!running) return;
 
-        const rect = UI.arena.getBoundingClientRect();
-        const tx = e.clientX - rect.left;
-        const ty = e.clientY - rect.top;
+      const rect = UI.arena.getBoundingClientRect();
+      const tx = (e.clientX - rect.left);
+      const ty = (e.clientY - rect.top);
 
-        const delta = SCORE[kind];
+      const delta = SCORE[kind];
 
-        if (delta > 0) {
-          streak++;
-          bestStreak = Math.max(bestStreak, streak);
+      if (delta > 0) {
+        streak++;
+        bestStreak = Math.max(bestStreak, streak);
 
-          if (kind === "red") sePuni("red");
-          else if (kind === "yellow") sePuni("yellow");
-          else sePuni("base");
+        if (kind === "red") sePuni("red");
+        else if (kind === "yellow") sePuni("yellow");
+        else sePuni("base");
 
-          score += delta;
+        score += delta;
 
-          const c =
-            kind === "red"
-              ? "rgba(255,107,138,.95)"
-              : kind === "yellow"
-              ? "rgba(255,210,90,.95)"
-              : "rgba(120,220,150,.95)";
+        const c =
+          kind === "red" ? "rgba(255,107,138,.95)" :
+          kind === "yellow" ? "rgba(255,210,90,.95)" :
+          "rgba(120,220,150,.95)";
 
-          burstEffect(tx, ty, kind === "red" ? 14 : 11, c);
-          spawnFloat(`+${delta}`, tx, ty, c);
+        burstEffect(tx, ty, kind === "red" ? 14 : 11, c);
+        spawnFloat(`+${delta}`, tx, ty, c);
 
-          if (navigator.vibrate) navigator.vibrate(8);
-        } else {
-          streak = 0;
+        if (navigator.vibrate) navigator.vibrate(8);
+      } else {
+        streak = 0;
 
-          if (kind === "purple") seBoyon("purple");
-          else seBoyon("blue");
+        if (kind === "purple") seBoyon("purple");
+        else seBoyon("blue");
 
-          score = Math.max(0, score + delta);
+        score = Math.max(0, score + delta);
 
-          const c = kind === "purple" ? "rgba(140,110,220,.95)" : "rgba(120,170,255,.95)";
-          burstEffect(tx, ty, 10, c);
-          spawnFloat(`${delta}`, tx, ty, c);
+        const c = kind === "purple" ? "rgba(140,110,220,.95)" : "rgba(120,170,255,.95)";
+        burstEffect(tx, ty, 10, c);
+        spawnFloat(`${delta}`, tx, ty, c);
 
-          if (navigator.vibrate) navigator.vibrate(14);
-        }
+        if (navigator.vibrate) navigator.vibrate(14);
+      }
 
-        setUI();
-        removeDrop(drop);
-      },
-      { passive: false }
-    );
+      setUI();
+      removeDrop(drop);
+    }, { passive: false });
 
     drops.push(drop);
   }
@@ -427,7 +390,8 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     drop.el.remove();
   }
 
-  // ====== Game loop ======
+  // ====== Loop ======
+  let lastFrame = 0;
   function loop(ts) {
     if (!running) return;
     if (!lastFrame) lastFrame = ts;
@@ -441,7 +405,6 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
       d.y += d.vy * dt;
       d.el.style.top = d.y + "px";
 
-      // 下まで落ちた：ミス（プラスのみ）
       if (d.y > arenaH + 80) {
         if (SCORE[d.kind] > 0) {
           streak = 0;
@@ -455,7 +418,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
     rafId = requestAnimationFrame(loop);
   }
 
-  // ====== Timer / start / reset ======
+  // ====== Start/Reset ======
   function stopAll() {
     if (timerId) clearInterval(timerId);
     if (spawnId) clearInterval(spawnId);
@@ -471,9 +434,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
   function resetGame() {
     stopAll();
     running = false;
-    score = 0;
-    streak = 0;
-    bestStreak = 0;
+    score = 0; streak = 0; bestStreak = 0;
     timeLeft = GAME_TIME;
     clearDrops();
     setUI();
@@ -498,7 +459,7 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
   function startGame() {
     if (running) return;
 
-    // ユーザー操作の中で AudioContext を起こす
+    // iOSはユーザー操作でAudioを起こす必要あり
     ensureAudio();
 
     resetGame();
@@ -521,12 +482,8 @@ document.addEventListener("gestureend", e => e.preventDefault(), { passive:false
   // ====== Events ======
   UI.start.addEventListener("click", startGame);
   UI.reset.addEventListener("click", resetGame);
-  UI.again.addEventListener("click", () => {
-    showOverlay(false);
-    startGame();
-  });
+  UI.again.addEventListener("click", () => { showOverlay(false); startGame(); });
   UI.close.addEventListener("click", () => showOverlay(false));
 
-  // 初期表示
   setUI();
 })();
