@@ -1,3 +1,22 @@
+// ====== iOS Safari 拡大防止（完全版） ======
+let lastTouchTime = 0;
+document.addEventListener(
+  "touchend",
+  (e) => {
+    const now = Date.now();
+    if (now - lastTouchTime < 350) {
+      e.preventDefault();
+    }
+    lastTouchTime = now;
+  },
+  { passive: false }
+);
+
+// ピンチズーム防止
+document.addEventListener("gesturestart", e => e.preventDefault(), { passive:false });
+document.addEventListener("gesturechange", e => e.preventDefault(), { passive:false });
+document.addEventListener("gestureend", e => e.preventDefault(), { passive:false });
+
 (() => {
   const UI = {
     score: document.getElementById("score"),
