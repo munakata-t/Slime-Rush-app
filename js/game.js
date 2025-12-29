@@ -14,6 +14,28 @@
     soundToggle: document.getElementById("soundToggle"),
   };
 
+  // ====== 画面拡大（ダブルタップ/ピンチ）対策 ======
+  // iOS Safariの「たまに拡大する」を止める用
+  let lastTouchEnd = 0;
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) e.preventDefault(); // ダブルタップ拡大防止
+      lastTouchEnd = now;
+    },
+    { passive: false }
+  );
+
+  // ピンチ拡大ジェスチャー防止（iOS）
+  ["gesturestart", "gesturechange", "gestureend"].forEach((ev) => {
+    document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  });
+
+  // ゲーム領域はスクロール/拡大を許さない
+  UI.arena.style.touchAction = "none";
+  UI.arena.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
   // ====== Game params ======
   const GAME_TIME = 20.0;
   const SPAWN_MS = 520;
@@ -25,7 +47,7 @@
   const MAX_DROPS = 18;
 
   // 見た目サイズ（CSS .drop img と合わせる）
-  const VISUAL_SIZE = 110;
+  const VISUAL_SIZE = 90;
 
   // 当たり判定 ちょい甘め
   const HIT_SCALE = 1.18;
@@ -75,16 +97,41 @@
   // ====== Audio（SE + BGM） ======
   let audioCtx = null;
 
+  // バス（音量バランス調整用）
+  let masterGain = null;
+  let seBus = null;
+  let bgmBus = null;
+
+  // ★ここで音量バランスを調整（BGM↓ / SE↑）
+  const MASTER_GAIN = 0.95;
+  const SE_BUS_GAIN = 1.35;   // ←SEを大きく
+  const BGM_BUS_GAIN = 0.28;  // ←BGMを小さく
+
   function ensureAudio() {
     if (!UI.soundToggle.checked) return;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
+
+    // 初回だけ音声バスを組む
+    if (!masterGain) {
+      masterGain = audioCtx.createGain();
+      seBus = audioCtx.createGain();
+      bgmBus = audioCtx.createGain();
+
+      masterGain.gain.value = MASTER_GAIN;
+      seBus.gain.value = SE_BUS_GAIN;
+      bgmBus.gain.value = BGM_BUS_GAIN;
+
+      seBus.connect(masterGain);
+      bgmBus.connect(masterGain);
+      masterGain.connect(audioCtx.destination);
+    }
   }
 
   function tone({ freq = 660, dur = 0.06, type = "sine", gain = 0.08, slide = 0 } = {}) {
     if (!UI.soundToggle.checked) return;
     ensureAudio();
-    if (!audioCtx) return;
+    if (!audioCtx || !seBus) return;
 
     const t0 = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
@@ -101,7 +148,7 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 
     osc.connect(g);
-    g.connect(audioCtx.destination);
+    g.connect(seBus);
     osc.start(t0);
     osc.stop(t0 + dur);
   }
@@ -109,64 +156,65 @@
   // ====== SE（前のまま：ぷにっ / ぼよん） ======
   function sePuni(mode = "base") {
     if (mode === "red") {
-      tone({ freq: 820, dur: 0.055, type: "triangle", gain: 0.10, slide: 0.16 });
-      setTimeout(() => tone({ freq: 1180, dur: 0.040, type: "sine", gain: 0.06, slide: 0.10 }), 12);
+      tone({ freq: 820, dur: 0.055, type: "triangle", gain: 0.11, slide: 0.16 });
+      setTimeout(() => tone({ freq: 1180, dur: 0.040, type: "sine", gain: 0.07, slide: 0.10 }), 12);
       return;
     }
     if (mode === "yellow") {
-      tone({ freq: 760, dur: 0.050, type: "triangle", gain: 0.09, slide: 0.13 });
-      setTimeout(() => tone({ freq: 1080, dur: 0.038, type: "sine", gain: 0.055, slide: 0.10 }), 12);
+      tone({ freq: 760, dur: 0.050, type: "triangle", gain: 0.10, slide: 0.13 });
+      setTimeout(() => tone({ freq: 1080, dur: 0.038, type: "sine", gain: 0.065, slide: 0.10 }), 12);
       return;
     }
-    tone({ freq: 720, dur: 0.048, type: "triangle", gain: 0.085, slide: 0.10 });
-    setTimeout(() => tone({ freq: 980, dur: 0.035, type: "sine", gain: 0.05, slide: 0.08 }), 12);
+    tone({ freq: 720, dur: 0.048, type: "triangle", gain: 0.095, slide: 0.10 });
+    setTimeout(() => tone({ freq: 980, dur: 0.035, type: "sine", gain: 0.055, slide: 0.08 }), 12);
   }
 
   function seBoyon(mode = "blue") {
     if (mode === "purple") {
-      tone({ freq: 210, dur: 0.11, type: "sine", gain: 0.10, slide: -0.18 });
-      setTimeout(() => tone({ freq: 155, dur: 0.12, type: "sine", gain: 0.07, slide: -0.10 }), 55);
+      tone({ freq: 210, dur: 0.11, type: "sine", gain: 0.11, slide: -0.18 });
+      setTimeout(() => tone({ freq: 155, dur: 0.12, type: "sine", gain: 0.08, slide: -0.10 }), 55);
       return;
     }
-    tone({ freq: 260, dur: 0.09, type: "sine", gain: 0.09, slide: -0.16 });
-    setTimeout(() => tone({ freq: 190, dur: 0.10, type: "sine", gain: 0.06, slide: -0.10 }), 45);
+    tone({ freq: 260, dur: 0.09, type: "sine", gain: 0.10, slide: -0.16 });
+    setTimeout(() => tone({ freq: 190, dur: 0.10, type: "sine", gain: 0.07, slide: -0.10 }), 45);
   }
 
   function seMiss() {
-    tone({ freq: 320, dur: 0.06, type: "sine", gain: 0.05, slide: -0.25 });
+    tone({ freq: 320, dur: 0.06, type: "sine", gain: 0.06, slide: -0.25 });
   }
 
   function seEnd() {
-    tone({ freq: 420, dur: 0.12, type: "sine", gain: 0.06, slide: -0.35 });
-    setTimeout(() => tone({ freq: 260, dur: 0.14, type: "sine", gain: 0.06, slide: -0.25 }), 90);
+    tone({ freq: 420, dur: 0.12, type: "sine", gain: 0.07, slide: -0.35 });
+    setTimeout(() => tone({ freq: 260, dur: 0.14, type: "sine", gain: 0.07, slide: -0.25 }), 90);
   }
 
-  // ====== BGM（ピコピコ寄り） ======
+  // ====== BGM（ピコピコ） ======
   let bgmOn = false;
   let bgmTimer = null;
 
-  // Cメジャー系：明るいピコピコ
+  // 明るいピコピコ
   const BGM_NOTES = [523.25, 659.25, 783.99, 659.25]; // C5 E5 G5 E5
+  const BGM_TEMPO_MS = 220; // テンポ
 
   function bgmBeep(freq) {
     if (!UI.soundToggle.checked) return;
     ensureAudio();
-    if (!audioCtx) return;
+    if (!audioCtx || !bgmBus) return;
 
     const t0 = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const g = audioCtx.createGain();
 
-    osc.type = "square"; // ピコピコ
+    osc.type = "square";
     osc.frequency.setValueAtTime(freq, t0);
 
-    // 短いプチ音
+    // バスで絞るので、ここは適度に（音色の芯を残す）
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(0.05, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
 
     osc.connect(g);
-    g.connect(audioCtx.destination);
+    g.connect(bgmBus);
     osc.start(t0);
     osc.stop(t0 + 0.20);
   }
@@ -184,7 +232,7 @@
       if (!bgmOn) return;
       bgmBeep(BGM_NOTES[step % BGM_NOTES.length]);
       step++;
-      bgmTimer = setTimeout(loop, 220); // テンポ
+      bgmTimer = setTimeout(loop, BGM_TEMPO_MS);
     };
 
     loop();
@@ -198,13 +246,12 @@
     }
   }
 
-  // 効果音トグルOFFでBGMも止める
   UI.soundToggle.addEventListener("change", () => {
     if (!UI.soundToggle.checked) stopBGM();
   });
 
   // ====== FX（弾ける） ======
-  // CSSで .spark のアニメがある前提（前のstyle.cssに入ってるやつ）
+  // CSSで .spark と @keyframes spark / .float と @keyframes floatUp がある前提
   function burstEffect(x, y, n = 10, color = "rgba(255,122,182,.9)") {
     for (let i = 0; i < n; i++) {
       const s = document.createElement("div");
@@ -320,13 +367,13 @@
 
           score += delta;
 
-          // 色別に“弾け方”ちょい変える
           const c =
             kind === "red"
               ? "rgba(255,107,138,.95)"
               : kind === "yellow"
               ? "rgba(255,210,90,.95)"
               : "rgba(120,220,150,.95)";
+
           burstEffect(tx, ty, kind === "red" ? 14 : 11, c);
           spawnFloat(`+${delta}`, tx, ty, c);
 
